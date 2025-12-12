@@ -106,7 +106,7 @@ public class EmployeesController(IRepository<Employee> employeeRepository, IRepo
             employeeRequest.Roles.Contains(element.Name, StringComparer.OrdinalIgnoreCase));
         var materializeRoles = employeeRoles.ToList();
         if (materializeRoles.Count != employeeRequest.Roles.Count)
-            return Problem(type: "BadRequest", title: "Invalid request", detail: "Роли пользователя задана некорректно",
+            return Problem(type: "BadRequest", title: "Invalid request", detail: "Роли пользователя заданы некорректно",
                 statusCode: StatusCodes.Status400BadRequest);
         var employee = new Employee
         {
@@ -166,7 +166,7 @@ public class EmployeesController(IRepository<Employee> employeeRepository, IRepo
             employeeRequest.Roles.Contains(element.Name, StringComparer.OrdinalIgnoreCase));
         var materializeRoles = employeeRoles.ToList();
         if (materializeRoles.Count != employeeRequest.Roles.Count)
-            return Problem(type: "BadRequest", title: "Invalid request", detail: "Роли пользователя задана некорректно",
+            return Problem(type: "BadRequest", title: "Invalid request", detail: "Роли пользователя заданы некорректно",
                 statusCode: StatusCodes.Status400BadRequest);
         var employeeWithSameEmail = await employeeRepository.FindAsync(element =>
             string.Equals(employeeRequest.Email, element.Email, StringComparison.OrdinalIgnoreCase) &&
