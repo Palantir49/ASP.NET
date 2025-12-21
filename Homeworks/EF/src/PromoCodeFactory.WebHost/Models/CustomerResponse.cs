@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using PromoCodeFactory.Core.Domain.PromoCodeManagement;
 
 namespace PromoCodeFactory.WebHost.Models;
 
@@ -12,5 +11,5 @@ public class CustomerResponse
     public string Email { get; set; }
 
     public ICollection<PreferenceResponse> Preferences { get; set; }
-    public ICollection<PromoCode> PromoCodes { get; set; }
+    public ICollection<PromoCodeShortResponse> PromoCodes { get; set; }
 }

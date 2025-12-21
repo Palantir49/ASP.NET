@@ -73,7 +73,15 @@ public class CustomersController(IRepositoryWrapper repositoryWrapper)
             FirstName = customer.FirstName,
             LastName = customer.LastName,
             Email = customer.Email,
-            PromoCodes = customer.PromoCodes,
+            PromoCodes = customer.PromoCodes.Select(x => new PromoCodeShortResponse
+            {
+                Id = x.Id,
+                Code = x.Code,
+                BeginDate = x.BeginDate.ToString("yyyy-MM-dd"),
+                EndDate = x.EndDate.ToString("yyyy-MM-dd"),
+                PartnerName = x.PartnerName,
+                ServiceInfo = x.ServiceInfo
+            }).ToList(),
             Preferences = customer.Preferences.Select(x => new PreferenceResponse { Name = x.Name }).ToList()
         };
         return Ok(customerResponse);
@@ -131,7 +139,15 @@ public class CustomersController(IRepositoryWrapper repositoryWrapper)
         {
             Id = newCustomer.Id,
             FirstName = newCustomer.FirstName, LastName = newCustomer.LastName, Email = newCustomer.Email,
-            PromoCodes = newCustomer.PromoCodes,
+            PromoCodes = newCustomer.PromoCodes.Select(x => new PromoCodeShortResponse
+            {
+                Id = x.Id,
+                Code = x.Code,
+                BeginDate = x.BeginDate.ToString("yyyy-MM-dd"),
+                EndDate = x.EndDate.ToString("yyyy-MM-dd"),
+                PartnerName = x.PartnerName,
+                ServiceInfo = x.ServiceInfo
+            }).ToList(),
             Preferences = newCustomer.Preferences.Select(x => new PreferenceResponse { Name = x.Name }).ToList()
         };
 
@@ -200,7 +216,15 @@ public class CustomersController(IRepositoryWrapper repositoryWrapper)
         {
             Id = customer.Id,
             FirstName = customer.FirstName, LastName = customer.LastName, Email = customer.Email,
-            PromoCodes = customer.PromoCodes,
+            PromoCodes = customer.PromoCodes.Select(x => new PromoCodeShortResponse
+            {
+                Id = x.Id,
+                Code = x.Code,
+                BeginDate = x.BeginDate.ToString("yyyy-MM-dd"),
+                EndDate = x.EndDate.ToString("yyyy-MM-dd"),
+                PartnerName = x.PartnerName,
+                ServiceInfo = x.ServiceInfo
+            }).ToList(),
             Preferences = customer.Preferences.Select(x => new PreferenceResponse { Name = x.Name }).ToList()
         };
         return Ok(customerResponse);
