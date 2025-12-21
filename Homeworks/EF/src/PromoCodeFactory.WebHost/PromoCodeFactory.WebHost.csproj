@@ -7,12 +7,21 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\PromoCodeFactory.Core\PromoCodeFactory.Core.csproj" />
-      <ProjectReference Include="..\PromoCodeFactory.DataAccess\PromoCodeFactory.DataAccess.csproj" />
+        <ProjectReference Include="..\PromoCodeFactory.Core\PromoCodeFactory.Core.csproj"/>
+        <ProjectReference Include="..\PromoCodeFactory.DataAccess\PromoCodeFactory.DataAccess.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="NSwag.AspNetCore" Version="14.1.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.22">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0"/>
+        <PackageReference Include="NSwag.AspNetCore" Version="14.1.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="Database\"/>
     </ItemGroup>
 
 </Project>
