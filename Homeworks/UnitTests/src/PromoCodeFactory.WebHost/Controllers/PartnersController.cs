@@ -7,143 +7,131 @@ using PromoCodeFactory.Core.Abstractions.Repositories;
 using PromoCodeFactory.Core.Domain.PromoCodeManagement;
 using PromoCodeFactory.WebHost.Models;
 
-namespace PromoCodeFactory.WebHost.Controllers
+namespace PromoCodeFactory.WebHost.Controllers;
+
+/// <summary>
+///     Партнеры
+/// </summary>
+[ApiController]
+[Route("api/v1/[controller]")]
+public class PartnersController(IRepository<Partner> partnersRepository) : ControllerBase
 {
-    /// <summary>
-    /// Партнеры
-    /// </summary>
-    [ApiController]
-    [Route("api/v1/[controller]")]
-    public class PartnersController
-        : ControllerBase
+    [HttpGet]
+    public async Task<ActionResult<List<PartnerResponse>>> GetPartnersAsync()
     {
-        private readonly IRepository<Partner> _partnersRepository;
+        var partners = await partnersRepository.GetAllAsync();
 
-        public PartnersController(IRepository<Partner> partnersRepository)
+        var response = partners.Select(x => new PartnerResponse
         {
-            _partnersRepository = partnersRepository;
+            Id = x.Id,
+            Name = x.Name,
+            NumberIssuedPromoCodes = x.NumberIssuedPromoCodes,
+            IsActive = true,
+            PartnerLimits = x.PartnerLimits
+                .Select(y => new PartnerPromoCodeLimitResponse
+                {
+                    Id = y.Id,
+                    PartnerId = y.PartnerId,
+                    Limit = y.Limit,
+                    CreateDate = y.CreateDate.ToString("dd.MM.yyyy hh:mm:ss"),
+                    EndDate = y.EndDate.ToString("dd.MM.yyyy hh:mm:ss"),
+                    CancelDate = y.CancelDate?.ToString("dd.MM.yyyy hh:mm:ss")
+                }).ToList()
+        });
+
+        return Ok(response);
+    }
+
+    [HttpGet("{id:guid}/limits/{limitId:guid}")]
+    public async Task<ActionResult<PartnerPromoCodeLimit>> GetPartnerLimitAsync(Guid id, Guid limitId)
+    {
+        var partner = await partnersRepository.GetByIdAsync(id);
+
+        if (partner == null)
+            return NotFound();
+
+        var limit = partner.PartnerLimits
+            .FirstOrDefault(x => x.Id == limitId);
+
+        var response = new PartnerPromoCodeLimitResponse
+        {
+            Id = limit.Id,
+            PartnerId = limit.PartnerId,
+            Limit = limit.Limit,
+            CreateDate = limit.CreateDate.ToString("dd.MM.yyyy hh:mm:ss"),
+            EndDate = limit.EndDate.ToString("dd.MM.yyyy hh:mm:ss"),
+            CancelDate = limit.CancelDate?.ToString("dd.MM.yyyy hh:mm:ss")
+        };
+
+        return Ok(response);
+    }
+
+    [HttpPost("{id:guid}/limits")]
+    public async Task<IActionResult> SetPartnerPromoCodeLimitAsync(Guid id, SetPartnerPromoCodeLimitRequest request)
+    {
+        var partner = await partnersRepository.GetByIdAsync(id);
+
+        if (partner == null)
+            return NotFound();
+
+        //Если партнер заблокирован, то нужно выдать исключение
+        if (!partner.IsActive)
+            return BadRequest("Данный партнер не активен");
+
+        //Установка лимита партнеру
+        var activeLimit = partner.PartnerLimits.FirstOrDefault(x =>
+            !x.CancelDate.HasValue);
+
+        if (activeLimit != null)
+        {
+            //Если партнеру выставляется лимит, то мы 
+            //должны обнулить количество промокодов, которые партнер выдал, если лимит закончился, 
+            //то количество не обнуляется
+            partner.NumberIssuedPromoCodes = 0;
+
+            //При установке лимита нужно отключить предыдущий лимит
+            activeLimit.CancelDate = DateTime.Now;
         }
 
-        [HttpGet]
-        public async Task<ActionResult<List<PartnerResponse>>> GetPartnersAsync()
+        if (request.Limit <= 0)
+            return BadRequest("Лимит должен быть больше 0");
+
+        var newLimit = new PartnerPromoCodeLimit
         {
-            var partners = await _partnersRepository.GetAllAsync();
+            Limit = request.Limit,
+            Partner = partner,
+            PartnerId = partner.Id,
+            CreateDate = DateTime.Now,
+            EndDate = request.EndDate
+        };
 
-            var response = partners.Select(x => new PartnerResponse()
-            {
-                Id = x.Id,
-                Name = x.Name,
-                NumberIssuedPromoCodes = x.NumberIssuedPromoCodes,
-                IsActive = true,
-                PartnerLimits = x.PartnerLimits
-                    .Select(y => new PartnerPromoCodeLimitResponse()
-                    {
-                        Id = y.Id,
-                        PartnerId = y.PartnerId,
-                        Limit = y.Limit,
-                        CreateDate = y.CreateDate.ToString("dd.MM.yyyy hh:mm:ss"),
-                        EndDate = y.EndDate.ToString("dd.MM.yyyy hh:mm:ss"),
-                        CancelDate = y.CancelDate?.ToString("dd.MM.yyyy hh:mm:ss"),
-                    }).ToList()
-            });
+        partner.PartnerLimits.Add(newLimit);
 
-            return Ok(response);
-        }
-        
-        [HttpGet("{id}/limits/{limitId}")]
-        public async Task<ActionResult<PartnerPromoCodeLimit>> GetPartnerLimitAsync(Guid id, Guid limitId)
-        {
-            var partner = await _partnersRepository.GetByIdAsync(id);
+        await partnersRepository.UpdateAsync(partner);
 
-            if (partner == null)
-                return NotFound();
-            
-            var limit = partner.PartnerLimits
-                .FirstOrDefault(x => x.Id == limitId);
+        return CreatedAtAction(nameof(GetPartnerLimitAsync), new { id = partner.Id, limitId = newLimit.Id }, null);
+    }
 
-            var response = new PartnerPromoCodeLimitResponse()
-            {
-                Id = limit.Id,
-                PartnerId = limit.PartnerId,
-                Limit = limit.Limit,
-                CreateDate = limit.CreateDate.ToString("dd.MM.yyyy hh:mm:ss"),
-                EndDate = limit.EndDate.ToString("dd.MM.yyyy hh:mm:ss"),
-                CancelDate = limit.CancelDate?.ToString("dd.MM.yyyy hh:mm:ss"),
-            };
-            
-            return Ok(response);
-        }
-        
-        [HttpPost("{id}/limits")]
-        public async Task<IActionResult> SetPartnerPromoCodeLimitAsync(Guid id, SetPartnerPromoCodeLimitRequest request)
-        {
-            var partner = await _partnersRepository.GetByIdAsync(id);
+    [HttpPost("{id:guid}/canceledLimits")]
+    public async Task<IActionResult> CancelPartnerPromoCodeLimitAsync(Guid id)
+    {
+        var partner = await partnersRepository.GetByIdAsync(id);
 
-            if (partner == null)
-                return NotFound();
-            
-            //Если партнер заблокирован, то нужно выдать исключение
-            if (!partner.IsActive)
-                return BadRequest("Данный партнер не активен");
-            
-            //Установка лимита партнеру
-            var activeLimit = partner.PartnerLimits.FirstOrDefault(x => 
-                !x.CancelDate.HasValue);
-            
-            if (activeLimit != null)
-            {
-                //Если партнеру выставляется лимит, то мы 
-                //должны обнулить количество промокодов, которые партнер выдал, если лимит закончился, 
-                //то количество не обнуляется
-                partner.NumberIssuedPromoCodes = 0;
-                
-                //При установке лимита нужно отключить предыдущий лимит
-                activeLimit.CancelDate = DateTime.Now;
-            }
+        if (partner == null)
+            return NotFound();
 
-            if (request.Limit <= 0)
-                return BadRequest("Лимит должен быть больше 0");
-            
-            var newLimit = new PartnerPromoCodeLimit()
-            {
-                Limit = request.Limit,
-                Partner = partner,
-                PartnerId = partner.Id,
-                CreateDate = DateTime.Now,
-                EndDate = request.EndDate
-            };
-            
-            partner.PartnerLimits.Add(newLimit);
+        //Если партнер заблокирован, то нужно выдать исключение
+        if (!partner.IsActive)
+            return BadRequest("Данный партнер не активен");
 
-            await _partnersRepository.UpdateAsync(partner);
-            
-            return CreatedAtAction(nameof(GetPartnerLimitAsync), new {id = partner.Id, limitId = newLimit.Id}, null);
-        }
-        
-        [HttpPost("{id}/canceledLimits")]
-        public async Task<IActionResult> CancelPartnerPromoCodeLimitAsync(Guid id)
-        {
-            var partner = await _partnersRepository.GetByIdAsync(id);
-            
-            if (partner == null)
-                return NotFound();
-            
-            //Если партнер заблокирован, то нужно выдать исключение
-            if (!partner.IsActive)
-                return BadRequest("Данный партнер не активен");
-            
-            //Отключение лимита
-            var activeLimit = partner.PartnerLimits.FirstOrDefault(x => 
-                !x.CancelDate.HasValue);
-            
-            if (activeLimit != null)
-            {
-                activeLimit.CancelDate = DateTime.Now;
-            }
+        //Отключение лимита
+        var activeLimit = partner.PartnerLimits.FirstOrDefault(x =>
+            !x.CancelDate.HasValue);
 
-            await _partnersRepository.UpdateAsync(partner);
+        if (activeLimit != null) activeLimit.CancelDate = DateTime.Now;
 
-            return NoContent();
-        }
+        await partnersRepository.UpdateAsync(partner);
+
+        return NoContent();
     }
 }
