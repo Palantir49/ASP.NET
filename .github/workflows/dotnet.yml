@@ -23,11 +23,12 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: CD to src
-        run: cd Homeworks/UnitTests/src
       - name: Restore dependencies
+        working-directory: ./Homeworks/UnitTests/src
         run: dotnet restore
       - name: Build
+        working-directory: ./Homeworks/UnitTests/src
         run: dotnet build --no-restore
       - name: Test
+        working-directory: ./Homeworks/UnitTests/src
         run: dotnet test --no-build --verbosity normal
