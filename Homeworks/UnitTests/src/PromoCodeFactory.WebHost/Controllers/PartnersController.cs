@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using PromoCodeFactory.Core.Abstractions.Repositories;
 using PromoCodeFactory.Core.Domain.PromoCodeManagement;
 using PromoCodeFactory.WebHost.Models;
+using PromoCodeFactory.WebHost.Services;
 
 namespace PromoCodeFactory.WebHost.Controllers;
 
@@ -78,38 +79,22 @@ public class PartnersController(IRepository<Partner> partnersRepository) : Contr
         if (!partner.IsActive)
             return BadRequest("Данный партнер не активен");
 
-        //Установка лимита партнеру
-        var activeLimit = partner.PartnerLimits.FirstOrDefault(x =>
-            !x.CancelDate.HasValue);
+        // Используем сервис для основной логики
+        PartnerLimitService partnerLimitService = new();
 
-        if (activeLimit != null)
-        {
-            //Если партнеру выставляется лимит, то мы 
-            //должны обнулить количество промокодов, которые партнер выдал, если лимит закончился, 
-            //то количество не обнуляется
-            partner.NumberIssuedPromoCodes = 0;
+        var result = partnerLimitService.ProcessLimitAsync(
+            partner,
+            request,
+            DateTime.Now);
 
-            //При установке лимита нужно отключить предыдущий лимит
-            activeLimit.CancelDate = DateTime.Now;
-        }
+        if (!result.IsSuccess)
+            return BadRequest(result.ErrorMessage);
 
-        if (request.Limit <= 0)
-            return BadRequest("Лимит должен быть больше 0");
-
-        var newLimit = new PartnerPromoCodeLimit
-        {
-            Limit = request.Limit,
-            Partner = partner,
-            PartnerId = partner.Id,
-            CreateDate = DateTime.Now,
-            EndDate = request.EndDate
-        };
-
-        partner.PartnerLimits.Add(newLimit);
 
         await partnersRepository.UpdateAsync(partner);
 
-        return CreatedAtAction(nameof(GetPartnerLimitAsync), new { id = partner.Id, limitId = newLimit.Id }, null);
+        return CreatedAtAction(nameof(GetPartnerLimitAsync), new { id = partner.Id, limitId = result.NewLimitId },
+            null);
     }
 
     [HttpPost("{id:guid}/canceledLimits")]
