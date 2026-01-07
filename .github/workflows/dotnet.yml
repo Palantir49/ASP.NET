@@ -60,7 +60,7 @@ jobs:
       - name: Build and push promocode-factory-api
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./Homeworks/UnitTests/src
           file: ./Homeworks/UnitTests/src/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/promocode-factory-api:${{ steps.branch-name.outputs.tag }}
