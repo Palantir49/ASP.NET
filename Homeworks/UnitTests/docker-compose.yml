@@ -9,6 +9,9 @@ services:
       - 5433:5432
     environment: 
       - POSTGRES_PASSWORD=docker
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+
   #Api
   promocode-factory-api:
     build: src
@@ -20,3 +23,6 @@ services:
       - "ConnectionStrings:PromoCodeFactoryDb=Host=promocode-factory-db;Database=promocode_factory_db;Username=postgres;Password=docker"          
     depends_on: 
       - promocode-factory-db
+
+volumes:
+  pg-data:
