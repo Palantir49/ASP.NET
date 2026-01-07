@@ -34,6 +34,7 @@ jobs:
         run: dotnet test --no-build --verbosity normal
   push:
     runs-on: ubuntu-latest
+    needs: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
