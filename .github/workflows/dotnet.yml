@@ -60,6 +60,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Homeworks/UnitTests/src/PromoCodeFactory.UnitTests/Dockerfile
+          file: ./Homeworks/UnitTests/src/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/promocode-factory-api:${{ steps.branch-name.outputs.tag }}
