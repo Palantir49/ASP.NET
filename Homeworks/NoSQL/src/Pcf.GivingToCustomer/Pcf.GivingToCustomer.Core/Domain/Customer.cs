@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Pcf.GivingToCustomer.Core.Domain
 {
@@ -12,8 +13,10 @@ namespace Pcf.GivingToCustomer.Core.Domain
 
         public string Email { get; set; }
 
-        public virtual ICollection<CustomerPreference> Preferences { get; set; }
-        
-        public virtual ICollection<PromoCodeCustomer> PromoCodes { get; set; }
+        // вместо CustomerPreference: просто список preferenceId
+        public List<Guid> PreferenceIds { get; set; } = [];
+    
+        // если нужны промокоды у клиента – тоже ids
+        public List<Guid> PromoCodeIds { get; set; } = [];
     }
 }

@@ -4,7 +4,7 @@ using Pcf.GivingToCustomer.DataAccess.Data;
 
 namespace Pcf.GivingToCustomer.DataAccess
 {
-    public class DataContext
+  /*  public class DataContext
         : DbContext
     {
         public DbSet<PromoCode> PromoCodes { get; set; }
@@ -37,5 +37,5 @@ namespace Pcf.GivingToCustomer.DataAccess
                 .WithMany()
                 .HasForeignKey(bc => bc.PreferenceId); 
         }
-    }
+    }*/
 }

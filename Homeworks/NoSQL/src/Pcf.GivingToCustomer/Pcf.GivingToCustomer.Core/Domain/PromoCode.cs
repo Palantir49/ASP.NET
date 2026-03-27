@@ -16,10 +16,9 @@ namespace Pcf.GivingToCustomer.Core.Domain
 
         public Guid PartnerId { get; set; }
         
-        public virtual Preference Preference { get; set; }
 
         public Guid PreferenceId { get; set; }
         
-        public virtual ICollection<PromoCodeCustomer> Customers { get; set; }
+        public List<Guid> CustomerIds { get; set; } = [];
     }
 }

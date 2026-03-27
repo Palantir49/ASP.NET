@@ -1,14 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.Extensions.Options;
 using Pcf.GivingToCustomer.DataAccess;
+using Pcf.GivingToCustomer.DataAccess.Configirations;
 
-namespace Pcf.GivingToCustomer.IntegrationTests
-{
-    public class TestDataContext
-        : DataContext
-    {
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlite("Filename=PromocodeFactoryGivingToCustomerDb.sqlite");
-        }
-    }
-}
+namespace Pcf.GivingToCustomer.IntegrationTests;
+
+public class TestDataContext(IOptions<MongoDbSettings> mongoDbSettings) : MongoDbDataContext(mongoDbSettings);
