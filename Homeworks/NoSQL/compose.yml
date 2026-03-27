@@ -63,3 +63,16 @@ services:
       - "ConnectionStrings:PromocodeFactoryGivingToCustomerDb=Host=promocode-factory-giving-to-customer-db;Database=promocode_factory_giving_to_customer_db;Username=postgres;Password=docker"          
     depends_on: 
       - promocode-factory-giving-to-customer-db
+        
+  mongo:
+    container_name: promocode-factory-giving-to-customer-mongodb
+    image: mongo:latest
+    restart: always
+    volumes:
+      - mongo_db_data:/data/db
+    ports:
+      - "27017:27017"
+          
+    
+volumes:
+   mongo_db_data:
