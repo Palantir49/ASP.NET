@@ -1,6 +1,6 @@
 ﻿namespace Pcf.MessageBus.RabbitMq.Options;
 
-public abstract class RabbitMqPublishOptions
+public sealed class RabbitMqPublishOptions
 {
     public string Exchange { get; set; } = default!;
     public string ExchangeType { get; set; } = "topic";
