@@ -4,5 +4,5 @@ namespace Pcf.Events;
 
 public sealed record PartnerManagerReceivingIntegrationEvent : IntegrationEvent
 {
-    public Guid EmployeeId { get; set; }
+    public Guid PartnerManagerId { get; set; }
 }
