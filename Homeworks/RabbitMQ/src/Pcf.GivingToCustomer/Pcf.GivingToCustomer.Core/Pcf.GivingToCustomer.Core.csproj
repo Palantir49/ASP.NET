@@ -4,4 +4,8 @@
         <TargetFramework>net10.0</TargetFramework>
     </PropertyGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\..\Pcf.Events\Pcf.Events.csproj"/>
+    </ItemGroup>
+
 </Project>

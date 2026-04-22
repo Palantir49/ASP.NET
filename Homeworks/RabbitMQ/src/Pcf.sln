@@ -41,6 +41,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pcf.MessageBus", "Pcf.Messa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pcf.Events", "Pcf.Events\Pcf.Events.csproj", "{C96B054D-757E-418A-B332-226BB6C7EC6C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pcf.Administration.Integration", "Pcf.Administration\Pcf.Administration.Integration\Pcf.Administration.Integration.csproj", "{4A836296-8D92-43A3-9E2F-7E6334DCE17F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -111,6 +113,10 @@ Global
 		{C96B054D-757E-418A-B332-226BB6C7EC6C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C96B054D-757E-418A-B332-226BB6C7EC6C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C96B054D-757E-418A-B332-226BB6C7EC6C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4A836296-8D92-43A3-9E2F-7E6334DCE17F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4A836296-8D92-43A3-9E2F-7E6334DCE17F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4A836296-8D92-43A3-9E2F-7E6334DCE17F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A836296-8D92-43A3-9E2F-7E6334DCE17F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -130,5 +136,6 @@ Global
 		{9CA552AE-FAAA-40B5-BC89-040F041CA48E} = {45AAAE31-1D5D-400B-ADAA-DE16D7B95BD5}
 		{3C4538FC-B200-4DC1-B278-DE43800B0BE3} = {45AAAE31-1D5D-400B-ADAA-DE16D7B95BD5}
 		{38F1FFB6-5EBF-4EDF-B74E-AF29B0F1ABF7} = {92A39EB2-4342-42A8-A30F-36DB3B5D2C95}
+		{4A836296-8D92-43A3-9E2F-7E6334DCE17F} = {92A39EB2-4342-42A8-A30F-36DB3B5D2C95}
 	EndGlobalSection
 EndGlobal

@@ -12,20 +12,18 @@ namespace Pcf.GivingToCustomer.WebHost.Mappers
         public static PromoCode MapFromModel(GivePromoCodeRequest request, Preference preference, IEnumerable<Customer> customers)
         {
 
-            var promocode = new PromoCode();
-            promocode.Id = request.PromoCodeId;
-
-            promocode.PartnerId = request.PartnerId;
-            promocode.Code = request.PromoCode;
-            promocode.ServiceInfo = request.ServiceInfo;
-
-            promocode.BeginDate = DateTime.Parse(request.BeginDate);
-            promocode.EndDate = DateTime.Parse(request.EndDate);
-
-            promocode.Preference = preference;
-            promocode.PreferenceId = preference.Id;
-
-            promocode.Customers = new List<PromoCodeCustomer>();
+            var promocode = new PromoCode
+            {
+                Id = request.PromoCodeId,
+                PartnerId = request.PartnerId,
+                Code = request.PromoCode,
+                ServiceInfo = request.ServiceInfo,
+                BeginDate = DateTime.Parse(request.BeginDate),
+                EndDate = DateTime.Parse(request.EndDate),
+                Preference = preference,
+                PreferenceId = preference.Id,
+                Customers = new List<PromoCodeCustomer>()
+            };
 
             foreach (var item in customers)
             {

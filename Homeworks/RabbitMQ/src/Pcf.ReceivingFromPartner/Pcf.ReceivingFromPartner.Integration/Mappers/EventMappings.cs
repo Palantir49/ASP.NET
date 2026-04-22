@@ -1,7 +1,7 @@
 ﻿using Pcf.Events;
 using Pcf.ReceivingFromPartner.Core.Domain;
 
-namespace Pcf.ReceivingFromPartner.Integration.Mappings;
+namespace Pcf.ReceivingFromPartner.Integration.Mappers;
 
 public static class EventMappings
 {

@@ -1,17 +1,15 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\Pcf.Events\Pcf.Events.csproj"/>
         <ProjectReference Include="..\..\Pcf.MessageBus\Pcf.MessageBus.csproj"/>
-        <ProjectReference Include="..\Pcf.ReceivingFromPartner.Core\Pcf.ReceivingFromPartner.Core.csproj"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="6.0.0"/>
+        <ProjectReference Include="..\Pcf.Administration.Core\Pcf.Administration.Core.csproj"/>
     </ItemGroup>
 
 </Project>
