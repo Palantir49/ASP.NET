@@ -6,8 +6,7 @@ using Pcf.MessageBus.RabbitMq.Serialization;
 namespace Pcf.MessageBus.RabbitMq.Subscriptions;
 
 internal sealed class SubscriptionDefinition<TEvent, THandler>(
-    RabbitMqSubscriptionOptions options,
-    IEventSerializer serializer)
+    RabbitMqSubscriptionOptions options)
     : ISubscriptionDefinition
     where TEvent : IntegrationEvent
     where THandler : class, IEventHandler<TEvent>
@@ -39,8 +38,10 @@ internal sealed class SubscriptionDefinition<TEvent, THandler>(
 
     public async Task HandleAsync(IServiceProvider serviceProvider, byte[] body, CancellationToken cancellationToken)
     {
-        var @event = serializer.Deserialize<TEvent>(body);
+        var serializer = serviceProvider.GetRequiredService<IEventSerializer>();
         var handler = serviceProvider.GetRequiredService<THandler>();
+
+        var @event = serializer.Deserialize<TEvent>(body);
         await handler.Handle(@event, cancellationToken);
     }
 }

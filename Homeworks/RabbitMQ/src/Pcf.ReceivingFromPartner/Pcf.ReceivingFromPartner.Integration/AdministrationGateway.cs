@@ -1,26 +1,25 @@
 ﻿using System;
 using System.Net.Http;
 using System.Threading.Tasks;
+using Pcf.Events;
+using Pcf.MessageBus.Abstractions;
 using Pcf.ReceivingFromPartner.Core.Abstractions.Gateways;
 
-namespace Pcf.ReceivingFromPartner.Integration
+namespace Pcf.ReceivingFromPartner.Integration;
+
+public class AdministrationGateway(HttpClient httpClient, IEventBus eventBus) : IAdministrationGateway
 {
-    public class AdministrationGateway
-        : IAdministrationGateway
+    public async Task NotifyAdminAboutPartnerManagerPromoCode(Guid partnerManagerId)
     {
-        private readonly HttpClient _httpClient;
-
-        public AdministrationGateway(HttpClient httpClient)
+        var @event = new PartnerManagerReceivingIntegrationEvent
         {
-            _httpClient = httpClient;
-        }
+            PartnerManagerId = partnerManagerId
+        };
 
-        public async Task NotifyAdminAboutPartnerManagerPromoCode(Guid partnerManagerId)
-        {
-            var response = await _httpClient.PostAsync($"api/v1/employees/{partnerManagerId}/appliedPromocodes",
-                new StringContent(string.Empty));
+        await eventBus.PublishAsync(@event);
+        /* var response = await httpClient.PostAsync($"api/v1/employees/{partnerManagerId}/appliedPromocodes",
+             new StringContent(string.Empty));
 
-            response.EnsureSuccessStatusCode();
-        }
+         response.EnsureSuccessStatusCode();*/
     }
 }
