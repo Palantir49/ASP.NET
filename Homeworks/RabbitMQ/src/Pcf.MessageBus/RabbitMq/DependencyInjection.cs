@@ -2,7 +2,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Pcf.MessageBus.Abstractions;
-using Pcf.MessageBus.RabbitMq.Hosting;
 using Pcf.MessageBus.RabbitMq.Infrastructure;
 using Pcf.MessageBus.RabbitMq.Options;
 using Pcf.MessageBus.RabbitMq.Serialization;
@@ -12,46 +11,76 @@ namespace Pcf.MessageBus.RabbitMq;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddRabbitMqEventBusCore(
-        this IServiceCollection services,
+    private static void AddCommonRabbitMqServices(
+        IServiceCollection services,
         IConfiguration configuration)
     {
         services
             .AddOptions<RabbitMqOptions>()
             .Bind(configuration.GetSection(RabbitMqOptions.SectionName))
+            .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        services.TryAddSingleton<IEventTopologyRegistry, RabbitMqTopologyRegistry>();
-        services.TryAddSingleton<IRabbitMqSubscriptionOptionsProvider, RabbitMqSubscriptionOptionsProvider>();
         services.TryAddSingleton<IEventSerializer, SystemTextJsonEventSerializer>();
-        services.TryAddSingleton<IEventBus, RabbitMqEventBus>();
-
-        return services;
+        services.TryAddSingleton<IEventTopologyRegistry, RabbitMqTopologyRegistry>();
     }
 
-    public static IServiceCollection AddRabbitMqEventPublisher(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    private static void ValidateSubscription(
+        RabbitMqSubscriptionOptions options,
+        string subscriptionName)
     {
-        services.AddRabbitMqEventBusCore(configuration);
-        return services;
+        if (string.IsNullOrWhiteSpace(options.Exchange))
+            throw new InvalidOperationException(
+                $"RabbitMq subscription '{subscriptionName}' has no Exchange.");
+
+        if (string.IsNullOrWhiteSpace(options.Queue))
+            throw new InvalidOperationException(
+                $"RabbitMq subscription '{subscriptionName}' has no Queue.");
+
+        if (string.IsNullOrWhiteSpace(options.RoutingKey))
+            throw new InvalidOperationException(
+                $"RabbitMq subscription '{subscriptionName}' has no RoutingKey.");
     }
 
-    public static IServiceCollection AddRabbitMqEventConsumers(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    extension(IServiceCollection services)
     {
-        services.AddRabbitMqEventBusCore(configuration);
-        services.AddHostedService<RabbitMqSubscriptionsHostedService>();
-        return services;
-    }
+        public IServiceCollection AddRabbitMqPublisher(IConfiguration configuration)
+        {
+            AddCommonRabbitMqServices(services, configuration);
 
-    public static IServiceCollection AddRabbitMqEventBus(
-        this IServiceCollection services,
-        IConfiguration configuration)
-    {
-        services.AddRabbitMqEventPublisher(configuration);
-        services.AddRabbitMqEventConsumers(configuration);
-        return services;
+            services.TryAddSingleton<IEventBus, RabbitMqEventBus>();
+
+            return services;
+        }
+
+        public IServiceCollection AddRabbitMqConsumer(IConfiguration configuration)
+        {
+            AddCommonRabbitMqServices(services, configuration);
+
+            services.TryAddSingleton<IEventBus, RabbitMqEventBus>();
+            services.AddHostedService<EventBusHostedService>();
+
+            return services;
+        }
+
+        public IServiceCollection AddRabbitMqSubscription<TEvent, THandler>(IConfiguration configuration,
+            string subscriptionName)
+            where TEvent : IntegrationEvent
+            where THandler : class, IEventHandler<TEvent>
+        {
+            services.AddScoped<THandler>();
+
+            var options = new RabbitMqSubscriptionOptions();
+            configuration
+                .GetSection($"{RabbitMqOptions.SectionName}:Subscriptions:{subscriptionName}")
+                .Bind(options);
+
+            ValidateSubscription(options, subscriptionName);
+
+            services.AddSingleton<IRabbitMqSubscriptionDescriptor>(
+                new RabbitMqSubscriptionDescriptor<TEvent, THandler>(options));
+
+            return services;
+        }
     }
 }
