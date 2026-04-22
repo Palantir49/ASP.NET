@@ -1,5 +1,4 @@
-﻿using System.Text;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Pcf.MessageBus.Abstractions;
@@ -12,73 +11,63 @@ using RabbitMQ.Client.Events;
 
 namespace Pcf.MessageBus.RabbitMq.Infrastructure;
 
-public sealed class RabbitMqEventBus(
-    IServiceScopeFactory scopeFactory,
-    IEventTopologyRegistry topologyRegistry,
-    IEventSerializer serializer,
-    IOptions<RabbitMqOptions> options,
-    ILogger<RabbitMqEventBus> logger)
-    : IEventBus, IAsyncDisposable
+public sealed class RabbitMqEventBus : IEventBus, IAsyncDisposable
 {
-    private readonly RabbitMqOptions _options = options.Value;
+    private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
-    private readonly List<ISubscriptionDefinition> _subscriptions = [];
     private readonly List<(IChannel Channel, string ConsumerTag)> _consumerChannels = [];
+    private readonly ILogger<RabbitMqEventBus> _logger;
+    private readonly RabbitMqOptions _options;
     private readonly SemaphoreSlim _publishLock = new(1, 1);
+    private readonly IEventSerializer _serializer;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IReadOnlyCollection<ISubscriptionDefinition> _subscriptions;
+    private readonly IEventTopologyRegistry _topologyRegistry;
 
     private IConnection? _connection;
+    private bool _consumersStarted;
     private IChannel? _publishChannel;
 
-    public void Subscribe<TEvent, THandler>(Action<SubscriptionBuilder> configure)
-        where TEvent : IntegrationEvent
+    public RabbitMqEventBus(
+        IServiceScopeFactory serviceScopeFactory,
+        IOptions<RabbitMqOptions> options,
+        IEventTopologyRegistry topologyRegistry,
+        IEnumerable<IRabbitMqSubscriptionDescriptor> subscriptionDescriptors,
+        IEventSerializer serializer,
+        ILogger<RabbitMqEventBus> logger)
+    {
+        _serviceScopeFactory = serviceScopeFactory;
+        _topologyRegistry = topologyRegistry;
+        _serializer = serializer;
+        _logger = logger;
+        _options = options.Value;
+        _subscriptions = subscriptionDescriptors.Select(x => x.Create()).ToArray();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync();
+        _publishLock.Dispose();
+        _connectionLock.Dispose();
+    }
+
+    public void Subscribe<TEvent, THandler>(Action<SubscriptionBuilder> configure) where TEvent : IntegrationEvent
         where THandler : class, IEventHandler<TEvent>
     {
-        var builder = new SubscriptionBuilder();
-        configure(builder);
-
-        NormalizeAndValidate(builder.Options);
-
-        _subscriptions.Add(new SubscriptionDefinition<TEvent, THandler>(
-            builder.Options,
-            serializer));
+        throw new NotSupportedException(
+            "Use IServiceCollection.AddRabbitMqSubscription<TEvent, THandler>(configuration, subscriptionName) during registration.");
     }
 
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
-        if (_connection is not null)
+        if (_consumersStarted)
             return;
 
-        var factory = new ConnectionFactory
-        {
-            HostName = _options.Connection.HostName,
-            Port = _options.Connection.Port,
-            UserName = _options.Connection.UserName,
-            Password = _options.Connection.Password,
-            VirtualHost = _options.Connection.VirtualHost,
-            ClientProvidedName = _options.Connection.ClientProvidedName,
-            AutomaticRecoveryEnabled = _options.Connection.AutomaticRecoveryEnabled,
-            TopologyRecoveryEnabled = _options.Connection.TopologyRecoveryEnabled,
-            ConsumerDispatchConcurrency = _options.Connection.ConsumerDispatchConcurrency
-        };
-
-        _connection = await factory.CreateConnectionAsync(cancellationToken);
-        _publishChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
-
-        _publishChannel.BasicReturnAsync += async (_, args) =>
-        {
-            logger.LogWarning(
-                "RabbitMQ returned message. Exchange={Exchange}, RoutingKey={RoutingKey}, ReplyCode={ReplyCode}, ReplyText={ReplyText}",
-                args.Exchange,
-                args.RoutingKey,
-                args.ReplyCode,
-                args.ReplyText);
-
-            await Task.CompletedTask;
-        };
+        await EnsureConnectionAsync(cancellationToken);
 
         foreach (var subscription in _subscriptions)
         {
-            var channel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
+            var channel = await _connection!.CreateChannelAsync(cancellationToken: cancellationToken);
 
             await DeclareTopologyAsync(channel, subscription, cancellationToken);
             await channel.BasicQosAsync(0, subscription.PrefetchCount, false, cancellationToken);
@@ -91,14 +80,14 @@ public sealed class RabbitMqEventBus(
             };
 
             var consumerTag = await channel.BasicConsumeAsync(
-                queue: subscription.Queue,
-                autoAck: false,
-                consumer: consumer,
-                cancellationToken: cancellationToken);
+                subscription.Queue,
+                false,
+                consumer,
+                cancellationToken);
 
             _consumerChannels.Add((channel, consumerTag));
 
-            logger.LogInformation(
+            _logger.LogInformation(
                 "Consumer started. Event={EventType}, Handler={HandlerType}, Queue={Queue}, Exchange={Exchange}, RoutingKey={RoutingKey}",
                 subscription.EventType.Name,
                 subscription.HandlerType.Name,
@@ -106,63 +95,76 @@ public sealed class RabbitMqEventBus(
                 subscription.Exchange,
                 subscription.RoutingKey);
         }
+
+        _consumersStarted = true;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         foreach (var (channel, consumerTag) in _consumerChannels)
-        {
             try
             {
-                await channel.BasicCancelAsync(consumerTag, cancellationToken:cancellationToken);
+                await channel.BasicCancelAsync(consumerTag, cancellationToken: cancellationToken);
                 await channel.CloseAsync(cancellationToken);
                 await channel.DisposeAsync();
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Error while stopping RabbitMQ consumer");
+                _logger.LogWarning(ex, "Error while stopping consumer channel.");
             }
-        }
 
         _consumerChannels.Clear();
+        _consumersStarted = false;
 
         if (_publishChannel is not null)
         {
-            await _publishChannel.CloseAsync(cancellationToken);
-            await _publishChannel.DisposeAsync();
+            try
+            {
+                await _publishChannel.CloseAsync(cancellationToken);
+                await _publishChannel.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error while stopping publish channel.");
+            }
+
             _publishChannel = null;
         }
 
         if (_connection is not null)
         {
-            await _connection.CloseAsync(cancellationToken);
-            await _connection.DisposeAsync();
+            try
+            {
+                await _connection.CloseAsync(cancellationToken);
+                await _connection.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error while closing RabbitMQ connection.");
+            }
+
             _connection = null;
         }
     }
 
-    public async Task PublishAsync<TEvent>(
-        TEvent @event,
-        CancellationToken cancellationToken = default)
+    public async Task PublishAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default)
         where TEvent : IntegrationEvent
     {
-        if (_publishChannel is null)
-            throw new InvalidOperationException("Event bus is not started.");
+        await EnsurePublishInfrastructureAsync(cancellationToken);
 
-        var options = topologyRegistry.GetPublishOptions<TEvent>();
+        var options = _topologyRegistry.GetPublishOptions<TEvent>();
 
         await _publishLock.WaitAsync(cancellationToken);
         try
         {
-            await _publishChannel.ExchangeDeclareAsync(
-                exchange: options.Exchange,
-                type: options.ExchangeType,
-                durable: options.Durable,
-                autoDelete: false,
-                arguments: null,
+            await _publishChannel!.ExchangeDeclareAsync(
+                options.Exchange,
+                options.ExchangeType,
+                options.Durable,
+                false,
                 cancellationToken: cancellationToken);
 
-            var body = serializer.Serialize(@event);
+            var body = _serializer.Serialize(@event);
 
             var properties = new BasicProperties
             {
@@ -175,12 +177,12 @@ public sealed class RabbitMqEventBus(
             };
 
             await _publishChannel.BasicPublishAsync(
-                exchange: options.Exchange,
-                routingKey: options.RoutingKey,
-                mandatory: options.Mandatory,
-                basicProperties: properties,
-                body: body,
-                cancellationToken: cancellationToken);
+                options.Exchange,
+                options.RoutingKey,
+                options.Mandatory,
+                properties,
+                body,
+                cancellationToken);
         }
         finally
         {
@@ -188,101 +190,95 @@ public sealed class RabbitMqEventBus(
         }
     }
 
-    private async Task HandleMessageAsync(
-        ISubscriptionDefinition subscription,
-        IChannel consumerChannel,
-        BasicDeliverEventArgs ea,
-        CancellationToken cancellationToken)
+    public void Subscribe<TEvent, THandler>()
+        where TEvent : IntegrationEvent
+        where THandler : IEventHandler<TEvent>
     {
+        throw new NotSupportedException(
+            "Use IServiceCollection.AddRabbitMqSubscription<TEvent, THandler>(configuration, subscriptionName) during registration.");
+    }
+
+    private ConnectionFactory CreateConnectionFactory()
+    {
+        return new ConnectionFactory
+        {
+            HostName = _options.Connection.HostName,
+            Port = _options.Connection.Port,
+            UserName = _options.Connection.UserName,
+            Password = _options.Connection.Password,
+            VirtualHost = _options.Connection.VirtualHost,
+            ClientProvidedName = _options.Connection.ClientProvidedName,
+            AutomaticRecoveryEnabled = _options.Connection.AutomaticRecoveryEnabled,
+            TopologyRecoveryEnabled = _options.Connection.TopologyRecoveryEnabled,
+            ConsumerDispatchConcurrency = _options.Connection.ConsumerDispatchConcurrency
+        };
+    }
+
+    private async Task EnsureConnectionAsync(CancellationToken cancellationToken)
+    {
+        if (_connection is not null && _connection.IsOpen)
+            return;
+
+        await _connectionLock.WaitAsync(cancellationToken);
         try
         {
-            var body = ea.Body.ToArray();
-
-            using var scope = scopeFactory.CreateScope();
-            await subscription.HandleAsync(scope.ServiceProvider, body, cancellationToken);
-
-            await consumerChannel.BasicAckAsync(
-                ea.DeliveryTag,
-                multiple: false,
-                cancellationToken: cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(
-                ex,
-                "Error while processing message. Queue={Queue}, Event={EventType}, Handler={HandlerType}",
-                subscription.Queue,
-                subscription.EventType.Name,
-                subscription.HandlerType.Name);
-
-            var retryCount = ReadRetryCount(ea.BasicProperties.Headers);
-
-            if (subscription.EnableRetry && retryCount < subscription.MaxRetryCount)
-            {
-                await PublishToRetryQueueAsync(subscription, ea, retryCount + 1, cancellationToken);
-
-                await consumerChannel.BasicAckAsync(
-                    ea.DeliveryTag,
-                    multiple: false,
-                    cancellationToken: cancellationToken);
-
+            if (_connection is not null && _connection.IsOpen)
                 return;
+
+            var factory = CreateConnectionFactory();
+            _connection = await factory.CreateConnectionAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "RabbitMQ connection established. ClientName={ClientProvidedName}",
+                _options.Connection.ClientProvidedName);
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
+    }
+
+    private async Task EnsurePublishChannelAsync(CancellationToken cancellationToken)
+    {
+        if (_publishChannel is not null && _publishChannel.IsOpen)
+            return;
+
+        await _connectionLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_publishChannel is not null && _publishChannel.IsOpen)
+                return;
+
+            if (_connection is null || !_connection.IsOpen)
+            {
+                var factory = CreateConnectionFactory();
+                _connection = await factory.CreateConnectionAsync(cancellationToken);
             }
 
-            await consumerChannel.BasicNackAsync(
-                ea.DeliveryTag,
-                multiple: false,
-                requeue: false,
-                cancellationToken: cancellationToken);
-        }
-    }
+            _publishChannel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
-    private async Task PublishToRetryQueueAsync(
-        ISubscriptionDefinition subscription,
-        BasicDeliverEventArgs ea,
-        int retryCount,
-        CancellationToken cancellationToken)
-    {
-        if (_publishChannel is null)
-            throw new InvalidOperationException("Publish channel is not initialized.");
-
-        await _publishLock.WaitAsync(cancellationToken);
-        try
-        {
-            var headers = ea.BasicProperties.Headers is null
-                ? new Dictionary<string, object?>()
-                : new Dictionary<string, object?>(ea.BasicProperties.Headers);
-
-            headers[RabbitMqHeaderNames.RetryCount] = retryCount;
-
-            var properties = new BasicProperties
+            _publishChannel.BasicReturnAsync += async (_, args) =>
             {
-                MessageId = ea.BasicProperties.MessageId,
-                Type = ea.BasicProperties.Type,
-                ContentType = ea.BasicProperties.ContentType,
-                DeliveryMode = DeliveryModes.Persistent,
-                Timestamp = ea.BasicProperties.Timestamp,
-                Headers = headers
+                _logger.LogWarning(
+                    "Message returned by broker. Exchange={Exchange}, RoutingKey={RoutingKey}, ReplyCode={ReplyCode}, ReplyText={ReplyText}",
+                    args.Exchange,
+                    args.RoutingKey,
+                    args.ReplyCode,
+                    args.ReplyText);
+
+                await Task.CompletedTask;
             };
-
-            await _publishChannel.BasicPublishAsync(
-                exchange: subscription.RetryExchange!,
-                routingKey: subscription.RetryRoutingKey!,
-                mandatory: false,
-                basicProperties: properties,
-                body: ea.Body,
-                cancellationToken: cancellationToken);
-
-            logger.LogWarning(
-                "Message sent to retry queue. Queue={Queue}, RetryCount={RetryCount}, RetryQueue={RetryQueue}",
-                subscription.Queue,
-                retryCount,
-                subscription.RetryQueue);
         }
         finally
         {
-            _publishLock.Release();
+            _connectionLock.Release();
         }
+    }
+
+    private async Task EnsurePublishInfrastructureAsync(CancellationToken cancellationToken)
+    {
+        await EnsureConnectionAsync(cancellationToken);
+        await EnsurePublishChannelAsync(cancellationToken);
     }
 
     private async Task DeclareTopologyAsync(
@@ -291,75 +287,37 @@ public sealed class RabbitMqEventBus(
         CancellationToken cancellationToken)
     {
         await channel.ExchangeDeclareAsync(
-            exchange: subscription.Exchange,
-            type: subscription.ExchangeType,
-            durable: subscription.Durable,
-            autoDelete: false,
-            arguments: null,
+            subscription.Exchange,
+            subscription.ExchangeType,
+            subscription.Durable,
+            false,
             cancellationToken: cancellationToken);
 
-        Dictionary<string, object?>? mainQueueArguments = null;
+        IDictionary<string, object?>? queueArguments = null;
 
         if (subscription.EnableDeadLetter)
-        {
-            mainQueueArguments = new Dictionary<string, object?>
+            queueArguments = new Dictionary<string, object?>
             {
                 ["x-dead-letter-exchange"] = subscription.DeadLetterExchange,
                 ["x-dead-letter-routing-key"] = subscription.DeadLetterRoutingKey
             };
-        }
 
         await channel.QueueDeclareAsync(
-            queue: subscription.Queue,
-            durable: subscription.Durable,
-            exclusive: subscription.Exclusive,
-            autoDelete: subscription.AutoDelete,
-            arguments: mainQueueArguments,
+            subscription.Queue,
+            subscription.Durable,
+            subscription.Exclusive,
+            subscription.AutoDelete,
+            queueArguments,
             cancellationToken: cancellationToken);
 
         await channel.QueueBindAsync(
-            queue: subscription.Queue,
-            exchange: subscription.Exchange,
-            routingKey: subscription.RoutingKey,
-            arguments: null,
+            subscription.Queue,
+            subscription.Exchange,
+            subscription.RoutingKey,
             cancellationToken: cancellationToken);
-
-        if (subscription.EnableDeadLetter)
-        {
-            await channel.ExchangeDeclareAsync(
-                exchange: subscription.DeadLetterExchange!,
-                type: ExchangeType.Direct,
-                durable: true,
-                autoDelete: false,
-                arguments: null,
-                cancellationToken: cancellationToken);
-
-            await channel.QueueDeclareAsync(
-                queue: subscription.DeadLetterQueue!,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                arguments: null,
-                cancellationToken: cancellationToken);
-
-            await channel.QueueBindAsync(
-                queue: subscription.DeadLetterQueue!,
-                exchange: subscription.DeadLetterExchange!,
-                routingKey: subscription.DeadLetterRoutingKey!,
-                arguments: null,
-                cancellationToken: cancellationToken);
-        }
 
         if (subscription.EnableRetry)
         {
-            await channel.ExchangeDeclareAsync(
-                exchange: subscription.RetryExchange!,
-                type: ExchangeType.Direct,
-                durable: true,
-                autoDelete: false,
-                arguments: null,
-                cancellationToken: cancellationToken);
-
             var retryQueueArguments = new Dictionary<string, object?>
             {
                 ["x-message-ttl"] = subscription.RetryTtlMilliseconds,
@@ -367,73 +325,75 @@ public sealed class RabbitMqEventBus(
                 ["x-dead-letter-routing-key"] = subscription.RoutingKey
             };
 
+            await channel.ExchangeDeclareAsync(
+                subscription.RetryExchange!,
+                "direct",
+                true,
+                false,
+                cancellationToken: cancellationToken);
+
             await channel.QueueDeclareAsync(
-                queue: subscription.RetryQueue!,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                arguments: retryQueueArguments,
+                subscription.RetryQueue!,
+                true,
+                false,
+                false,
+                retryQueueArguments,
                 cancellationToken: cancellationToken);
 
             await channel.QueueBindAsync(
-                queue: subscription.RetryQueue!,
-                exchange: subscription.RetryExchange!,
-                routingKey: subscription.RetryRoutingKey!,
-                arguments: null,
+                subscription.RetryQueue!,
+                subscription.RetryExchange!,
+                subscription.RetryRoutingKey!,
+                cancellationToken: cancellationToken);
+        }
+
+        if (subscription.EnableDeadLetter)
+        {
+            await channel.ExchangeDeclareAsync(
+                subscription.DeadLetterExchange!,
+                "direct",
+                true,
+                false,
+                cancellationToken: cancellationToken);
+
+            await channel.QueueDeclareAsync(
+                subscription.DeadLetterQueue!,
+                true,
+                false,
+                false,
+                cancellationToken: cancellationToken);
+
+            await channel.QueueBindAsync(
+                subscription.DeadLetterQueue!,
+                subscription.DeadLetterExchange!,
+                subscription.DeadLetterRoutingKey!,
                 cancellationToken: cancellationToken);
         }
     }
 
-    private static int ReadRetryCount(IDictionary<string, object?>? headers)
+    private async Task HandleMessageAsync(
+        ISubscriptionDefinition subscription,
+        IChannel channel,
+        BasicDeliverEventArgs ea,
+        CancellationToken cancellationToken)
     {
-        if (headers is null)
-            return 0;
-
-        if (!headers.TryGetValue(RabbitMqHeaderNames.RetryCount, out var value) || value is null)
-            return 0;
-
-        return value switch
+        try
         {
-            byte b => b,
-            sbyte sb => sb,
-            short s => s,
-            ushort us => us,
-            int i => i,
-            long l => (int)l,
-            byte[] bytes when int.TryParse(Encoding.UTF8.GetString(bytes), out var result) => result,
-            _ => 0
-        };
-    }
+            var body = ea.Body.ToArray();
 
-    private static void NormalizeAndValidate(RabbitMqSubscriptionOptions options)
-    {
-        if (string.IsNullOrWhiteSpace(options.Exchange))
-            throw new ArgumentException("Exchange is required.");
+            using var scope = _serviceScopeFactory.CreateScope();
+            await subscription.HandleAsync(scope.ServiceProvider, body, cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(options.Queue))
-            throw new ArgumentException("Queue is required.");
-
-        if (string.IsNullOrWhiteSpace(options.RoutingKey))
-            throw new ArgumentException("RoutingKey is required.");
-
-        if (options.EnableDeadLetter)
-        {
-            options.DeadLetterExchange ??= $"{options.Queue}.dlx";
-            options.DeadLetterQueue ??= $"{options.Queue}.dlq";
-            options.DeadLetterRoutingKey ??= $"{options.Queue}.dlq";
+            await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
         }
-
-        if (options.EnableRetry)
+        catch (Exception ex)
         {
-            options.RetryExchange ??= $"{options.Queue}.retry.exchange";
-            options.RetryQueue ??= $"{options.Queue}.retry";
-            options.RetryRoutingKey ??= $"{options.Queue}.retry";
-        }
-    }
+            _logger.LogError(ex,
+                "Message processing failed. Queue={Queue}, EventType={EventType}",
+                subscription.Queue,
+                subscription.EventType.Name);
 
-    public async ValueTask DisposeAsync()
-    {
-        await StopAsync();
-        _publishLock.Dispose();
+            await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
+        }
     }
 }
