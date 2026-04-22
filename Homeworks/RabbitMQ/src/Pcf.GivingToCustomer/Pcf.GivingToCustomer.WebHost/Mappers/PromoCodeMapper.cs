@@ -35,7 +35,8 @@ namespace Pcf.GivingToCustomer.WebHost.Mappers
                     PromoCodeId = promocode.Id,
                     PromoCode = promocode
                 });
-            };
+            }
+            ;
 
             return promocode;
         }
