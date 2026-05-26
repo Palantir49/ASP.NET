@@ -7,13 +7,12 @@ namespace Pcf.GivingToCustomer.DataAccess;
 
 public class MongoDbDataContext
 {
-    private readonly MongoClient _client;
     private readonly IMongoDatabase _database;
 
     public MongoDbDataContext(IOptions<MongoDbSettings> mongoDbSettings)
     {
-        _client = new MongoClient(mongoDbSettings.Value.ConnectionString);
-        _database = _client.GetDatabase(mongoDbSettings.Value.DatabaseName);
+        var client = new MongoClient(mongoDbSettings.Value.ConnectionString);
+        _database = client.GetDatabase(mongoDbSettings.Value.DatabaseName);
     }
 
 

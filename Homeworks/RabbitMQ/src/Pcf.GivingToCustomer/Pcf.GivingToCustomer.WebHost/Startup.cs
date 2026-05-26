@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Pcf.Events;
 using Pcf.GivingToCustomer.Core.Abstractions.Gateways;
 using Pcf.GivingToCustomer.Core.Abstractions.Repositories;
 using Pcf.GivingToCustomer.Core.Abstractions.Services;
@@ -14,8 +13,7 @@ using Pcf.GivingToCustomer.DataAccess;
 using Pcf.GivingToCustomer.DataAccess.Data;
 using Pcf.GivingToCustomer.DataAccess.Repositories;
 using Pcf.GivingToCustomer.Integration;
-using Pcf.GivingToCustomer.Integration.EventHandlers;
-using Pcf.MessageBus.RabbitMq;
+using Pcf.GivingToCustomer.WebHost.GraphQL;
 using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
 
 namespace Pcf.GivingToCustomer.WebHost;
@@ -33,13 +31,6 @@ public class Startup
     // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
     public void ConfigureServices(IServiceCollection services)
     {
-        //add rabbitmq consumer
-        services.AddRabbitMqConsumer(Configuration);
-        services.AddRabbitMqSubscription<
-            PromoCodeReceivingIntegrationEvent,
-            PromoCodeReceivingIntegrationEventHandler>(
-            Configuration,
-            "giving-to-customer-promocode-received");
         services.AddScoped<IPromoCodeService, PromoCodeService>();
 
         services.AddControllers().AddMvcOptions(x =>
@@ -62,6 +53,17 @@ public class Startup
             options.Title = "PromoCode Factory Giving To Customer API Doc";
             options.Version = "1.0";
         });
+        services
+            .AddGraphQLServer()
+            .AddQueryType()
+            .AddMutationType()
+            .AddTypeExtension<PreferencesQueries>()
+            .AddTypeExtension<CustomerQueries>()
+            .AddTypeExtension<CustomersMutations>()
+            .AddTypeExtension<PromoCodesQueries>()
+            .AddTypeExtension<PromoCodesMutations>()
+            .AddFiltering()
+            .AddSorting();
     }
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -79,8 +81,11 @@ public class Startup
 
         app.UseRouting();
 
-        app.UseEndpoints(endpoints => { endpoints.MapControllers(); });
-
+        app.UseEndpoints(endpoints =>
+        {
+            endpoints.MapControllers();
+            endpoints.MapGraphQL();
+        });
         dbInitializer.InitializeDb();
     }
 }
