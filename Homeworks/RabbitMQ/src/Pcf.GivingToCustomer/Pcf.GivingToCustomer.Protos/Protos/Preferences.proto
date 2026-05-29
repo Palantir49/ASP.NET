@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package preferences;
+
+service PreferencesService {
+  
+  rpc GetPreferencesAsync(google.protobuf.Empty) returns (PreferenceResponse);
+  
+}
+
+message PreferenceResponse {
+  repeated PreferenceShort preferences = 1;
+}
+
+message PreferenceShort {
+  string id = 1;
+  string name = 2;
+}

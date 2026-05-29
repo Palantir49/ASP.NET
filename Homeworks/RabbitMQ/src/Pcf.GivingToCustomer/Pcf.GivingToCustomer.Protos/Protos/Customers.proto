@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package customers;
+
+service CustomersService {
+
+    rpc GetCustomersAsync(google.protobuf.Empty) returns (CustomerShortResponse);
+    rpc GetCustomerAsync(CustomerRequest) returns (CustomerResponse);
+    rpc CreateCustomerAsync(CreateOrEditCustomerRequest) returns (CustomerResponse);
+    rpc EditCustomersAsync(EditCustomerRequest) returns (google.protobuf.Empty);
+    rpc DeleteCustomerAsync(DeleteCustomerRequest) returns (google.protobuf.Empty);
+}
+        
+        
+    message CustomerShort {
+           string id = 1;
+           string first_name = 2;
+           string last_name = 3;
+           string email = 4;        
+    }
+    
+    message CustomerShortResponse {
+        repeated CustomerShort customerShort = 1;
+       
+    }
+    
+    message CustomerRequest{
+      string id = 1;
+    }
+    
+    message CustomerResponse {
+      string id = 1;
+      string first_name = 2;
+      string last_name = 3; 
+      string email = 4;
+      repeated PreferenceResponse preferences = 5;
+      repeated PromoCodeShortResponse promo_codes = 6;
+    }
+    
+    message PreferenceResponse {
+      string id = 1;
+      string name = 2;
+    }
+
+message PromoCodeShortResponse {
+  string id = 1;
+  string code = 2;
+  string service_info = 3;
+  string begin_date = 4;
+  string end_date = 5;
+  string partner_id = 6;
+}
+
+message CreateOrEditCustomerRequest {
+  string first_name = 1;
+  string last_name = 2;
+  string email = 3;
+  repeated string preference_ids = 4;
+}
+
+message EditCustomerRequest {
+  string id = 1;
+  CreateOrEditCustomerRequest request = 2;
+  
+}
+
+message DeleteCustomerRequest {
+  string id = 1;
+}

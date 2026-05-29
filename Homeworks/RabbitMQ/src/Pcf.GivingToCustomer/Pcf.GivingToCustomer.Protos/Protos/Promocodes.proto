@@ -1,0 +1,34 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+
+package promo_codes;
+
+service PromoCodesService {
+  rpc GetPromoCodesAsync(google.protobuf.Empty) returns (PromoCodeShortResponse);
+  rpc GivePromoCodesToCustomersWithPreferenceAsync(GivePromoCodeRequest) returns (google.protobuf.Empty);
+}
+
+
+message PromoCodeShortResponse {
+ repeated PromoCodeShort promo_code = 1;
+}
+
+message PromoCodeShort {
+  string id = 1;
+  string code = 2;
+  string ServiceInfo = 3;
+  string BeginDate = 4;
+  string EndDate = 5;
+  string partner_id = 6;
+}
+
+
+message GivePromoCodeRequest {
+  string service_info = 1;
+  string partner_id = 2;
+  string promo_code_id = 3;
+  string promo_code = 4;
+  string preference_id = 5;
+  string begin_date = 6;
+  string end_date = 7;
+}

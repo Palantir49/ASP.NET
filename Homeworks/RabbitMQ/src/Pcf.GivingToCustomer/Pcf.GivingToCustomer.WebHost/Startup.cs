@@ -14,6 +14,8 @@ using Pcf.GivingToCustomer.DataAccess.Data;
 using Pcf.GivingToCustomer.DataAccess.Repositories;
 using Pcf.GivingToCustomer.Integration;
 using Pcf.GivingToCustomer.WebHost.GraphQL;
+using Pcf.GivingToCustomer.WebHost.Grpc.Interceptors;
+using Pcf.GivingToCustomer.WebHost.Grpc.Services;
 using IConfiguration = Microsoft.Extensions.Configuration.IConfiguration;
 
 namespace Pcf.GivingToCustomer.WebHost;
@@ -64,6 +66,7 @@ public class Startup
             .AddTypeExtension<PromoCodesMutations>()
             .AddFiltering()
             .AddSorting();
+        services.AddGrpc(o => o.Interceptors.Add<ExceptionInterceptor>());
     }
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -85,6 +88,9 @@ public class Startup
         {
             endpoints.MapControllers();
             endpoints.MapGraphQL();
+            endpoints.MapGrpcService<CustomersService>();
+            endpoints.MapGrpcService<PreferencesService>();
+            endpoints.MapGrpcService<PromoCodesService>();
         });
         dbInitializer.InitializeDb();
     }
